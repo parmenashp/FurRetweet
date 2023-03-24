@@ -108,3 +108,5 @@ class FurStream(tweepy.AsyncStreamingClient):
             self.reset_delta = reset_at - datetime.now(tz=timezone.utc)
             await self.wait_for_rate_limit(self.reset_delta)
             logger.info(f"Rate limit exceeded, resetting in {self.reset_delta}")
+        except tweepy_errors.HTTPException as e:
+            logger.exception(f"Error while retweeting: {e}")
