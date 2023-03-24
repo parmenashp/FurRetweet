@@ -50,6 +50,23 @@ class AccountAgeFilter(BaseFilter):
         return False
 
 
+class MaxNewLinesFilter(BaseFilter):
+    def __init__(self, maximum: int):
+        self.maximum = maximum
+
+    def filter(self, response: StreamResponse) -> bool:
+        if response.tweet.text.count("\n") > self.maximum:
+            return False
+        return True
+
+
+class FursuitFridayOnlyFilter(BaseFilter):
+    def filter(self, response: StreamResponse) -> bool:
+        if response.tweet.text.lower().strip() == "#fursuitfriday":
+            return False
+        return True
+
+
 class MediaFilter(BaseFilter):
     def filter(self, response: StreamResponse) -> bool:
         if response.includes.media:

@@ -23,6 +23,8 @@ class FurStream(tweepy.AsyncStreamingClient):
             filters.AccountAgeFilter(30),
             filters.MediaFilter(),
             filters.NumberHashtagsFilter(5),
+            filters.MaxNewLinesFilter(10),
+            filters.FursuitFridayOnlyFilter(),
         ]
         self.has_limit = True
         self.reset_delta: timedelta = timedelta(seconds=0)
@@ -97,7 +99,9 @@ class FurStream(tweepy.AsyncStreamingClient):
                 f"Tweet {response.tweet.id} from @{response.author.username} passed all filters."
             )
             if not self.has_limit:
-                return logger.info("Rate limit exceeded, waiting for reset in {self.reset_delta}")
+                return logger.info(
+                    f"Rate limit exceeded, waiting for reset in {self.reset_delta.seconds}s"
+                )
             await response.retweet()
             logger.info(f"Retweeted tweet https://twitter.com/_/status/{response.tweet.id}")
         except tweepy_errors.TooManyRequests as e:
@@ -105,8 +109,8 @@ class FurStream(tweepy.AsyncStreamingClient):
             reset_at = datetime.fromtimestamp(
                 int(resp.headers["x-rate-limit-reset"]), tz=timezone.utc
             )
-            self.reset_delta = reset_at - datetime.now(tz=timezone.utc)
+            self.reset_delta = datetime.now(tz=timezone.utc) - reset_at
             await self.wait_for_rate_limit(self.reset_delta)
-            logger.info(f"Rate limit exceeded, resetting in {self.reset_delta}")
+            logger.info(f"Rate limit exceeded, resetting in {self.reset_delta.seconds}s")
         except tweepy_errors.HTTPException as e:
             logger.exception(f"Error while retweeting: {e}")
