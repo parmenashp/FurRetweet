@@ -1,0 +1,4 @@
+services:
+  furretweet:
+    build: .
+    restart: on-restart
