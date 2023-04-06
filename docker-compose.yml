@@ -1,4 +1,4 @@
 services:
-  furretweet:
+  bot:
     build: .
     restart: unless-stopped
