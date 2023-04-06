@@ -1,4 +1,4 @@
 services:
   furretweet:
     build: .
-    restart: on-restart
+    restart: unless-stopped
