@@ -30,4 +30,4 @@ RUN poetry config virtualenvs.create false \
 COPY . /code
 
 
-CMD ["doppler", "run", "--", "python", "furretweet"]
+CMD ["doppler", "run", "--", "python", "-m", "furretweet"]

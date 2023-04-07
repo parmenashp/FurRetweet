@@ -2,8 +2,8 @@ import tweepy.asynchronous as tweepy
 from tweepy import StreamRule
 import asyncio
 from loguru import logger
-from stream import FurStream
-from config import Config
+from furretweet.stream import FurStream
+from furretweet.config import Config
 
 STREAM_EXPANSIONS = "author_id,attachments.media_keys"
 STREAM_TWEET_FIELDS = "author_id,created_at,entities,public_metrics,possibly_sensitive"
