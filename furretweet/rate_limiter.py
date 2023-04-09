@@ -1,22 +1,32 @@
-import time
+from datetime import datetime, timezone
 
 
-class RateLimiter:
-    def __init__(self, limit: int, period: int):
-        self.limit = limit
-        self.period = period
-        self.tokens = 0
+class RetweetLimitHandler:
+    def __init__(self):
+        self.populated = False
+        self.remaining = 0
+        self.reset_time = datetime.now(timezone.utc)
+        self.limit = 0
 
-    def consume(self):
-        self.update_tokens()
-        if self.tokens < 1:
-            return False
-        self.tokens -= 1
-        return True
+    def is_limit_exceeded(self) -> bool:
+        return self.remaining == 0 and datetime.now(timezone.utc) < self.reset_time
 
-    def update_tokens(self):
-        now = time.monotonic()
-        time_since_update = now - self.last_update
-        new_tokens = time_since_update * self.limit / self.period
-        self.tokens = min(self.limit, self.tokens + new_tokens)
-        self.last_update = now
+    def update_limits(self, headers):
+        self.populated = True
+        remaining = int(headers.get("x-rate-limit-remaining", 0))
+        reset = int(headers.get("x-rate-limit-reset", 0))
+        limit = int(headers.get("x-rate-limit-limit", 0))
+
+        if remaining:
+            self.remaining = remaining
+        if reset:
+            self.reset_time = datetime.fromtimestamp(reset, timezone.utc)
+        if limit:
+            self.limit = limit
+
+    @property
+    def seconds_until_reset(self) -> int:
+        """Returns the number of seconds until the rate limit resets."""
+        reset_time = self.reset_time.replace(microsecond=0)
+        time_to_wait = reset_time - datetime.now(timezone.utc)
+        return int(time_to_wait.total_seconds())

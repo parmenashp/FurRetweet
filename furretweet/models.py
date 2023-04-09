@@ -1,12 +1,12 @@
 import tweepy.asynchronous as tweepy
-import tweepy.errors as tweepy_errors
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from datetime import datetime
 from loguru import logger
 from typing import TYPE_CHECKING
+from aiohttp import ClientResponse
 
 if TYPE_CHECKING:
-    from furretweet.filters import Filter
+    from furretweet.filters import Filter, BaseFilter
 
 
 class PublicMetricsUser(BaseModel):
@@ -65,20 +65,27 @@ class StreamResponse:
         self.tweet = tweet
         self.includes = includes
         self.errors = errors
+        self.failed_filters: list[BaseFilter] = []
+        self.limit_reached = False
 
     def process_filters(self, filters: list["Filter"]) -> list["Filter"]:
         failed_filters = []
         for f in filters:
             if not f.filter(self):
                 failed_filters.append(f)
+        self.failed_filters = failed_filters
         return failed_filters
 
     @property
     def author(self) -> User:
         return self.includes.users[0]
 
-    async def retweet(self) -> None:
-        await self.client.retweet(self.tweet.id)
+    async def retweet(self) -> ClientResponse:
+        return await self.client.retweet(self.tweet.id)  # type: ignore
+
+    @property
+    def url(self) -> str:
+        return f"https://twitter.com/{self.author.username}/status/{self.tweet.id}"
 
     def __str__(self) -> str:
-        return f"(https://twitter.com/_/status/{self.tweet.id}) @{self.author.username}: {self.tweet.text}"
+        return f"({self.url}) @{self.author.username}: {self.tweet.text}"

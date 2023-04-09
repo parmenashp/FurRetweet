@@ -16,6 +16,9 @@ async-lru = "^2.0.2"
 oauthlib = "^3.2.2"
 pydantic = "^1.10.6"
 ujson = "^5.7.0"
+pytelegrambotapi = "^4.10.0"
+motor = "^3.1.1"
+pymongo = "^4.3.3"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.1.0"

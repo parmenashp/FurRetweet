@@ -3,31 +3,42 @@ import tweepy.asynchronous as tweepy
 from loguru import logger
 import aiohttp
 import ujson as json
-from furretweet import filters
+import furretweet.filters as filters
+from furretweet.rate_limiter import RetweetLimitHandler
 from furretweet.models import Tweet, Includes, StreamResponse
 import tweepy.errors as tweepy_errors
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from furretweet.__main__ import FurRetweet
+
+
+class LimitReached(Exception):
+    pass
 
 
 class FurStream(tweepy.AsyncStreamingClient):
-    def __init__(self, *, bearer_token: str, client: tweepy.AsyncClient, max_retries: int = 5):
+    def __init__(self, *, bearer_token: str, furretweet: "FurRetweet"):
         super().__init__(
             bearer_token=bearer_token,
-            max_retries=max_retries,
+            max_retries=5,
         )
-        self.client = client
+        self.furretweet = furretweet
+        self.client = furretweet.client
+        self.rate_limit_handler = RetweetLimitHandler()
+
         self.filters: list[filters.BaseFilter] = [
             filters.BannedTermsFilter(),
             filters.MinimumFollowersFilter(100),
             filters.NsfwFilter(),
-            filters.AccountAgeFilter(30),
+            filters.MinimumAccountAgeFilter(30),
             filters.MediaFilter(),
-            filters.NumberHashtagsFilter(5),
-            filters.MaxNewLinesFilter(10),
+            filters.MaximumHashtagsFilter(5),
+            filters.MaximumNewLinesFilter(10),
             filters.FursuitFridayOnlyFilter(),
         ]
-        self.has_limit = True
-        self.reset_delta: timedelta = timedelta(seconds=0)
 
     async def on_connect(self):
         logger.info("Stream connected")
@@ -45,20 +56,6 @@ class FurStream(tweepy.AsyncStreamingClient):
         logger.exception(f"Stream exception: {exception}")
 
     async def on_data(self, raw_data):
-        """|coroutine|
-
-        This is called when raw data is received from the stream.
-        This method handles sending the data to other methods.
-
-        Parameters
-        ----------
-        raw_data : JSON
-            The raw data from the stream
-
-        References
-        ----------
-        https://developer.twitter.com/en/docs/twitter-api/tweets/filtered-stream/integrate/consuming-streaming-data
-        """
         data = json.loads(raw_data)
 
         tweet = None
@@ -76,41 +73,67 @@ class FurStream(tweepy.AsyncStreamingClient):
         tweet = Tweet.parse_obj(data["data"])
         includes = Includes.parse_obj(data["includes"])
 
-        await self.on_response(
-            StreamResponse(client=self.client, tweet=tweet, includes=includes, errors=errors)
-        )
-
-    async def wait_for_rate_limit(self, timedelta: timedelta):
-        self.has_limit = False
-        await asyncio.sleep(timedelta.total_seconds())
-        self.has_limit = True
+        try:
+            await self.on_response(
+                StreamResponse(client=self.client, tweet=tweet, includes=includes, errors=errors)
+            )
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception(f"Unhandled exception while processing stream response: {tweet}")
 
     async def on_response(self, response: StreamResponse):
         logger.debug(f"Stream received response: {response}")
 
         failed_filters = response.process_filters(self.filters)
         if failed_filters:
-            logger.debug(
-                f"Tweet https://twitter.com/_/status/{response.tweet.id} failed filters: {failed_filters}"
-            )
-            return
-        try:
-            logger.info(
-                f"Tweet {response.tweet.id} from @{response.author.username} passed all filters."
-            )
-            if not self.has_limit:
-                return logger.info(
-                    f"Rate limit exceeded, waiting for reset in {self.reset_delta.seconds}s"
+            return await self.on_failed_filters(response)
+        else:
+            await self.retweet(response)
+
+    async def on_failed_filters(self, response: StreamResponse):
+        await self.furretweet.mongo.not_retweeted_tweets_repository.add(response)
+        logger.info(
+            f"Tweet {response.url} not retweeted due to failed filters {response.failed_filters}."
+        )
+
+    async def on_rate_limit_exceeded(self, response: StreamResponse):
+        response.limit_reached = True
+        await self.furretweet.mongo.not_retweeted_tweets_repository.add(response)
+        logger.info(
+            f"Tweet {response.url} not retweeted due to rate limit. "
+            f"Reset in {self.rate_limit_handler.seconds_until_reset}s"
+        )
+
+    async def retweet(self, response: StreamResponse):
+        if not self.rate_limit_handler.populated or not self.rate_limit_handler.is_limit_exceeded:
+            try:
+                # r = await response.retweet()
+                # self.rate_limit_handler.update_limits(r.headers)
+                logger.info(
+                    f"Retweeted tweet {response.url}\n"
+                    f"Rate limit remaining {self.rate_limit_handler.remaining} of {self.rate_limit_handler.limit}. "
+                    f"Resets in {self.rate_limit_handler.seconds_until_reset}s"
                 )
-            await response.retweet()
-            logger.info(f"Retweeted tweet https://twitter.com/_/status/{response.tweet.id}")
-        except tweepy_errors.TooManyRequests as e:
-            resp: aiohttp.ClientResponse = e.response
-            reset_at = datetime.fromtimestamp(
-                int(resp.headers["x-rate-limit-reset"]), tz=timezone.utc
-            )
-            self.reset_delta = datetime.now(tz=timezone.utc) - reset_at
-            await self.wait_for_rate_limit(self.reset_delta)
-            logger.info(f"Rate limit exceeded, resetting in {self.reset_delta.seconds}s")
-        except tweepy_errors.HTTPException as e:
-            logger.exception(f"Error while retweeting: {e}")
+
+            except tweepy_errors.TooManyRequests as e:
+                r: aiohttp.ClientResponse = e.response
+                self.rate_limit_handler.update_limits(r.headers)
+
+                if not self.rate_limit_handler.populated:
+                    logger.debug(
+                        "Rate limit handler not populated, ignoring 429 Too Many Requests error."
+                    )
+                else:
+                    logger.warning(
+                        "Limit handler somehow missed the rate limit. Got 429 Too Many Requests error from Twitter. "
+                        "Updating limits from response."
+                    )
+
+                return await self.on_rate_limit_exceeded(response)
+
+            except tweepy_errors.HTTPException as e:
+                logger.exception(f"Error while retweeting: {e}")
+
+        if self.rate_limit_handler.is_limit_exceeded:
+            return await self.on_rate_limit_exceeded(response)

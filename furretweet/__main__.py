@@ -4,6 +4,7 @@ import asyncio
 from loguru import logger
 from furretweet.stream import FurStream
 from furretweet.config import Config
+from furretweet.database import MongoDatabase
 
 STREAM_EXPANSIONS = "author_id,attachments.media_keys"
 STREAM_TWEET_FIELDS = "author_id,created_at,entities,public_metrics,possibly_sensitive"
@@ -18,16 +19,26 @@ STREAM_RULES = [
 
 
 class FurRetweet:
-    def __init__(self, *, config: Config, client: tweepy.AsyncClient, stream: FurStream):
-        self.config = config
-        self.stream = stream
+    def __init__(
+        self,
+    ):
+        self.config = Config()
+        self.client = tweepy.AsyncClient(
+            consumer_key=self.config.twitter.consumer_key,
+            consumer_secret=self.config.twitter.consumer_secret,
+            access_token=self.config.twitter.access_token,
+            access_token_secret=self.config.twitter.access_token_secret,
+            wait_on_rate_limit=False,
+        )
+        self.mongo = MongoDatabase(self.config)
+        self.stream = FurStream(bearer_token=self.config.twitter.bearer_token, furretweet=self)
         self._stream_task: asyncio.Task | None = None
 
     async def start(self):
         logger.info("Starting FurRetweet")
-        await self.start_stream()
+        await self._start_stream()
 
-    async def setup_stream_filter(self):
+    async def _setup_stream_filter(self):
         # Check if rule already exists, if not add it
         rules = await self.stream.get_rules()
         # await self.stream.delete_rules(rules.data)  # type: ignore
@@ -37,9 +48,9 @@ class FurRetweet:
             return
         logger.info("Stream rules found")
 
-    async def start_stream(self):
+    async def _start_stream(self):
         logger.debug(f"Stream Rules: {STREAM_RULES}")
-        await self.setup_stream_filter()
+        await self._setup_stream_filter()
         logger.info("Starting stream")
         self._stream_task = await self.stream.filter(
             expansions=STREAM_EXPANSIONS,
@@ -48,15 +59,6 @@ class FurRetweet:
         )
 
 
-config = Config()
-client = tweepy.AsyncClient(
-    consumer_key=config.twitter.consumer_key,
-    consumer_secret=config.twitter.consumer_secret,
-    access_token=config.twitter.access_token,
-    access_token_secret=config.twitter.access_token_secret,
-    wait_on_rate_limit=False,
-)
-stream = FurStream(bearer_token=config.twitter.bearer_token, client=client)
-furretweet = FurRetweet(config=config, client=client, stream=stream)
+furretweet = FurRetweet()
 
 asyncio.run(furretweet.start())

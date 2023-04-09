@@ -4,4 +4,29 @@ services:
     restart: unless-stopped
     pull_policy: build
     environment:
-      - DOPPLER_TOKEN
+      - DOPPLER_TOKEN=dp.st.dev.rMIkpcJNZwYXVAL9Xa9GE03du9Uz9AFnqNYuv8qMUPo
+      - MONGO_URI=mongodb://furretweet:areallygoodpasswordhere@mongo:27017
+
+  mongo:
+    image: mongo:4.4
+    restart: unless-stopped
+    volumes:
+      - ./mongo/entrypoint.js:/docker-entrypoint-initdb.d/entrypoint.js:ro
+      - mongodata:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=furretweet
+      - MONGO_INITDB_ROOT_PASSWORD=areallygoodpasswordhere
+      - MONGO_INITDB_DATABASE=furretweeet
+
+  mongo-express:
+    image: mongo-express
+    restart: unless-stopped
+    ports:
+      - 8081:8081
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: furretweet
+      ME_CONFIG_MONGODB_ADMINPASSWORD: areallygoodpasswordhere
+      ME_CONFIG_MONGODB_URL: mongodb://furretweet:areallygoodpasswordhere@mongo:27017/
+
+volumes:
+  mongodata:
