@@ -4,8 +4,8 @@ services:
     restart: unless-stopped
     pull_policy: build
     environment:
-      - DOPPLER_TOKEN=dp.st.dev.rMIkpcJNZwYXVAL9Xa9GE03du9Uz9AFnqNYuv8qMUPo
-      - MONGO_URI=mongodb://furretweet:areallygoodpasswordhere@mongo:27017
+      - DOPPLER_TOKEN
+      - MONGO_URI=mongodb://furretweet:${MONGO_DB_PASSWORD}@mongo:27017
 
   mongo:
     image: mongo:4.4
@@ -14,9 +14,9 @@ services:
       - ./mongo/entrypoint.js:/docker-entrypoint-initdb.d/entrypoint.js:ro
       - mongodata:/data/db
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=furretweet
-      - MONGO_INITDB_ROOT_PASSWORD=areallygoodpasswordhere
-      - MONGO_INITDB_DATABASE=furretweeet
+      MONGO_INITDB_ROOT_USERNAME: furretweet
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_DB_PASSWORD}
+      MONGO_INITDB_DATABASE: furretweet
 
   mongo-express:
     image: mongo-express
@@ -25,8 +25,10 @@ services:
       - 8081:8081
     environment:
       ME_CONFIG_MONGODB_ADMINUSERNAME: furretweet
-      ME_CONFIG_MONGODB_ADMINPASSWORD: areallygoodpasswordhere
-      ME_CONFIG_MONGODB_URL: mongodb://furretweet:areallygoodpasswordhere@mongo:27017/
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_DB_PASSWORD}
+      ME_CONFIG_MONGODB_URL: mongodb://furretweet:${MONGO_DB_PASSWORD}@mongo:27017
+      ME_CONFIG_BASICAUTH_USERNAME: furretweet
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD}
 
 volumes:
   mongodata:
