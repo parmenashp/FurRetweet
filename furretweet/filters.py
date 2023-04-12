@@ -4,6 +4,9 @@ from furretweet.models import Tweet, StreamResponse
 from datetime import datetime, timezone, timedelta
 
 
+Filter = TypeVar("Filter", bound="BaseFilter")
+
+
 class BaseFilter:
     def filter(self, response: StreamResponse) -> bool:
         """Should return False if the tweet should be
@@ -19,14 +22,6 @@ class BaseFilter:
 
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__}>"
-
-
-Filter = TypeVar("Filter", bound=BaseFilter)
-
-
-# class FancamFilter(BaseFilter):
-#     def filter(self, response: StreamResponse) -> bool:
-#         pass
 
 
 class MinimumFollowersFilter(BaseFilter):

@@ -49,7 +49,7 @@ class FurStream(tweepy.AsyncStreamingClient):
     async def on_closed(self, resp: aiohttp.ClientResponse):
         logger.info(f"Stream closed by Twitter with response: {resp}")
 
-    async def on_errors(self, errors: dict):
+    async def on_errors(self, errors: list[dict]):
         logger.error(f"Stream errors: {errors}")
 
     async def on_exception(self, exception: Exception):
@@ -108,8 +108,8 @@ class FurStream(tweepy.AsyncStreamingClient):
     async def retweet(self, response: StreamResponse):
         if not self.rate_limit_handler.populated or not self.rate_limit_handler.is_limit_exceeded:
             try:
-                # r = await response.retweet()
-                # self.rate_limit_handler.update_limits(r.headers)
+                r = await response.retweet()
+                self.rate_limit_handler.update_limits(r.headers)
                 logger.info(
                     f"Retweeted tweet {response.url}\n"
                     f"Rate limit remaining {self.rate_limit_handler.remaining} of {self.rate_limit_handler.limit}. "
