@@ -12,8 +12,10 @@ from furretweet.filters import (
 )
 from freezegun import freeze_time
 
+from furretweet.models import Media, StreamResponse
 
-def test_minimum_followers_filter(mock_response):
+
+def test_minimum_followers_filter(mock_response: StreamResponse):
     mock_response.author.public_metrics.followers_count = 650
     min_followers_filter = MinimumFollowersFilter(min_followers=400)
     assert min_followers_filter.filter(mock_response)
@@ -25,7 +27,7 @@ def test_minimum_followers_filter(mock_response):
     assert min_followers_filter.details == {"min_followers": 500, "followers_count": 450}
 
 
-def test_nsfw_filter(mock_response):
+def test_nsfw_filter(mock_response: StreamResponse):
     nsfw_filter = NsfwFilter()
 
     mock_response.tweet.possibly_sensitive = False
@@ -35,7 +37,7 @@ def test_nsfw_filter(mock_response):
     assert not nsfw_filter.filter(mock_response)
 
 
-def test_minimum_account_age_filter(mock_response):
+def test_minimum_account_age_filter(mock_response: StreamResponse):
     initial_datetime = datetime(year=2010, month=7, day=12, hour=15, minute=6, second=3)
 
     with freeze_time(initial_datetime):
@@ -58,7 +60,7 @@ def test_minimum_account_age_filter(mock_response):
         }
 
 
-def test_maximum_new_lines_filter(mock_response):
+def test_maximum_new_lines_filter(mock_response: StreamResponse):
     max_new_lines_filter = MaximumNewLinesFilter(max=3)
 
     mock_response.tweet.text = "line\nline2\nline3\nline4"
@@ -70,7 +72,7 @@ def test_maximum_new_lines_filter(mock_response):
     assert max_new_lines_filter.details == {"max_new_lines": 3, "new_lines": 4}
 
 
-def test_fursuit_friday_only_filter(mock_response):
+def test_fursuit_friday_only_filter(mock_response: StreamResponse):
     fursuit_friday_only_filter = FursuitFridayOnlyFilter()
 
     mock_response.tweet.text = "test"
@@ -80,25 +82,27 @@ def test_fursuit_friday_only_filter(mock_response):
     assert not fursuit_friday_only_filter.filter(mock_response)
 
 
-def test_media_filter(mock_response):
+def test_media_filter(mock_response: StreamResponse):
     media_filter = MediaFilter()
 
-    mock_response.includes.media = [{"media_key": "3_1517533153853902848", "type": "photo"}]
+    mock_response.includes.media = [
+        Media.parse_obj({"media_key": "3_1517533153853902848", "type": "photo"})
+    ]
     assert media_filter.filter(mock_response)
 
     mock_response.includes.media = []
     assert not media_filter.filter(mock_response)
 
 
-def test_maximum_hashtags_filter(mock_response):
+def test_maximum_hashtags_filter(mock_response: StreamResponse):
     max_hashtags_filter = MaximumHashtagsFilter(max=2)
     assert max_hashtags_filter.filter(mock_response)
 
-    mock_response.tweet.entities["hashtags"] = [{"text": "test1"}, {"text": "test2"}]
+    mock_response.tweet.entities["hashtags"] = [{"text": "test1"}, {"text": "test2"}]  # type: ignore
     assert max_hashtags_filter.filter(mock_response)
     assert max_hashtags_filter.details == {"max_hashtags": 2, "hashtags_count": 2}
 
-    mock_response.tweet.entities["hashtags"] = [
+    mock_response.tweet.entities["hashtags"] = [  # type: ignore
         {"text": "test1"},
         {"text": "test2"},
         {"text": "test3"},
@@ -107,7 +111,7 @@ def test_maximum_hashtags_filter(mock_response):
     assert max_hashtags_filter.details == {"max_hashtags": 2, "hashtags_count": 3}
 
 
-def test_banned_terms_filter(mock_response):
+def test_banned_terms_filter(mock_response: StreamResponse):
     banned_terms_filter = BannedTermsFilter()
 
     banned_terms_filter.banned_words = ["crypto", "nft", "kill"]

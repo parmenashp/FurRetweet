@@ -1,3 +1,4 @@
+from typing import Any
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 from pydantic import ValidationError
@@ -6,9 +7,10 @@ from furretweet.database import (
     MongoDatabase,
     NotRetweetedTweetsRepository,
     NotRetweetedTweet,
-    FailedFilter,
 )
 from datetime import datetime, timezone
+
+from furretweet.models import StreamResponse
 
 
 # This fixture is a sample configuration
@@ -24,16 +26,16 @@ def sample_config():
 
 
 @pytest.fixture
-def mongo_database(sample_config):
+def mongo_database(sample_config: MagicMock):
     return MongoDatabase(config=sample_config)
 
 
 @pytest.fixture
-def not_retweeted_tweets_repository(mongo_database):
+def not_retweeted_tweets_repository(mongo_database: MongoDatabase):
     return mongo_database.not_retweeted_tweets_repository
 
 
-def test_mongo_database_initialization(sample_config):
+def test_mongo_database_initialization(sample_config: MagicMock):
     mongo_database = MongoDatabase(config=sample_config)
 
     assert mongo_database.config == sample_config
@@ -63,7 +65,9 @@ def test_not_retweeted_tweet_model():
 
 
 @pytest.mark.asyncio
-async def test_not_retweeted_tweets_repository_add(mock_response, not_retweeted_tweets_repository):
+async def test_not_retweeted_tweets_repository_add(
+    mock_response: StreamResponse, not_retweeted_tweets_repository
+):
     not_retweeted_tweets_repository.collection.insert_one = AsyncMock()
     banned_terms_filter = BannedTermsFilter()
     banned_terms_filter.words_found = ["banned", "words"]
