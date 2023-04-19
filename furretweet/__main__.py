@@ -5,6 +5,7 @@ from loguru import logger
 from furretweet.stream import FurStream
 from furretweet.config import Config
 from furretweet.database import MongoDatabase
+import aiohttp
 
 STREAM_EXPANSIONS = "author_id,attachments.media_keys"
 STREAM_TWEET_FIELDS = "author_id,created_at,entities,public_metrics,possibly_sensitive"
@@ -29,6 +30,7 @@ class FurRetweet:
             access_token=self.config.twitter.access_token,
             access_token_secret=self.config.twitter.access_token_secret,
             wait_on_rate_limit=False,
+            return_type=aiohttp.ClientResponse,  # type: ignore
         )
         self.mongo = MongoDatabase(self.config)
         self.stream = FurStream(bearer_token=self.config.twitter.bearer_token, furretweet=self)
