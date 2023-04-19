@@ -1,3 +1,4 @@
+from typing import Any
 import pytest
 import json
 from furretweet.filters import MinimumFollowersFilter
@@ -14,7 +15,7 @@ def mock_furretweet():
 
 
 @pytest.fixture
-def fur_stream(mock_furretweet):
+def fur_stream(mock_furretweet: MagicMock):
     bearer_token = "test_bearer_token"
     return FurStream(bearer_token=bearer_token, furretweet=mock_furretweet)
 
@@ -25,7 +26,7 @@ def mock_stream_response():
 
 
 @pytest.mark.asyncio
-async def test_on_data(fur_stream, raw_data_example):
+async def test_on_data(fur_stream: FurStream, raw_data_example: dict[str, Any]):
     # Mock on_response method to not call the real method
     fur_stream.on_response = AsyncMock()
 
@@ -40,7 +41,7 @@ async def test_on_data(fur_stream, raw_data_example):
 
 
 @pytest.mark.asyncio
-async def test_on_response(fur_stream, mock_response):
+async def test_on_response(fur_stream: FurStream, mock_response: StreamResponse):
     # Check if retweet was called with a StreamResponse object with no failed filters
     fur_stream.retweet = AsyncMock()
     mock_response.process_filters = MagicMock()
@@ -63,7 +64,7 @@ async def test_on_response(fur_stream, mock_response):
 
 
 @pytest.mark.asyncio
-async def test_on_failed_filters(fur_stream, mock_stream_response):
+async def test_on_failed_filters(fur_stream: FurStream, mock_stream_response: MagicMock):
     # Mock add method of not_retweeted_tweets_repository
     fur_stream.furretweet.mongo.not_retweeted_tweets_repository.add = AsyncMock()
 
@@ -76,7 +77,7 @@ async def test_on_failed_filters(fur_stream, mock_stream_response):
 
 
 @pytest.mark.asyncio
-async def test_on_rate_limit_exceeded(fur_stream, mock_stream_response):
+async def test_on_rate_limit_exceeded(fur_stream: FurStream, mock_stream_response: MagicMock):
     # Mock add method of not_retweeted_tweets_repository
     fur_stream.furretweet.mongo.not_retweeted_tweets_repository.add = AsyncMock()
 
@@ -89,8 +90,8 @@ async def test_on_rate_limit_exceeded(fur_stream, mock_stream_response):
 
 
 @pytest.mark.asyncio
-async def test_retweet_success(fur_stream, mock_stream_response):
-    fur_stream.rate_limit_handler.is_limit_exceeded = False
+async def test_retweet_success(fur_stream: FurStream, mock_stream_response: MagicMock):
+    fur_stream.rate_limit_handler.is_limit_exceeded = lambda: False
     fur_stream.rate_limit_handler.populated = True
     mock_stream_response.retweet = AsyncMock()
     fur_stream.rate_limit_handler.update_limits = MagicMock()
@@ -104,8 +105,8 @@ async def test_retweet_success(fur_stream, mock_stream_response):
 
 
 @pytest.mark.asyncio
-async def test_retweet_limit_exceeded(fur_stream, mock_stream_response):
-    fur_stream.rate_limit_handler.is_limit_exceeded = True
+async def test_retweet_limit_exceeded(fur_stream: FurStream, mock_stream_response: MagicMock):
+    fur_stream.rate_limit_handler.is_limit_exceeded = lambda: False
     fur_stream.rate_limit_handler.populated = True
     mock_stream_response.retweet = AsyncMock()
     fur_stream.rate_limit_handler.update_limits = MagicMock()
@@ -119,8 +120,8 @@ async def test_retweet_limit_exceeded(fur_stream, mock_stream_response):
 
 
 @pytest.mark.asyncio
-async def test_retweet_too_many_requests(fur_stream, mock_stream_response):
-    fur_stream.rate_limit_handler.is_limit_exceeded = False
+async def test_retweet_too_many_requests(fur_stream: FurStream, mock_stream_response: MagicMock):
+    fur_stream.rate_limit_handler.is_limit_exceeded = lambda: False
     fur_stream.rate_limit_handler.populated = True
     fur_stream.rate_limit_handler.update_limits = MagicMock()
     fur_stream.on_rate_limit_exceeded = AsyncMock()
@@ -136,8 +137,8 @@ async def test_retweet_too_many_requests(fur_stream, mock_stream_response):
 
 
 @pytest.mark.asyncio
-async def test_retweet_http_exception(fur_stream, mock_stream_response):
-    fur_stream.rate_limit_handler.is_limit_exceeded = False
+async def test_retweet_http_exception(fur_stream: FurStream, mock_stream_response: MagicMock):
+    fur_stream.rate_limit_handler.is_limit_exceeded = lambda: False
     fur_stream.rate_limit_handler.populated = True
     fur_stream.rate_limit_handler.update_limits = MagicMock()
     mock_stream_response.retweet = AsyncMock(side_effect=HTTPException(response=MagicMock()))
