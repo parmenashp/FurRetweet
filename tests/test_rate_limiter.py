@@ -7,15 +7,32 @@ from freezegun import freeze_time
 def test_is_limit_exceeded():
     handler = RetweetLimitHandler()
 
+    # Test when rate limit handler is not populated
+    handler.populated = False
+    handler.remaining = 0
+    handler.reset_time = datetime.now(timezone.utc) + timedelta(seconds=10)
+    assert not handler.is_limit_exceeded()
+
+    # Test when rate limit handler is populated
+    handler.populated = True
+
+    # Remaining requests > 0, not yet exceeded
     handler.remaining = 1
     handler.reset_time = datetime.now(timezone.utc) + timedelta(seconds=10)
     assert not handler.is_limit_exceeded()
 
+    # Remaining requests = 0, limit exceeded
     handler.remaining = 0
     handler.reset_time = datetime.now(timezone.utc) + timedelta(seconds=10)
     assert handler.is_limit_exceeded()
 
+    # Remaining requests = 0, limit reset
     handler.remaining = 0
+    handler.reset_time = datetime.now(timezone.utc) - timedelta(seconds=10)
+    assert not handler.is_limit_exceeded()
+
+    # Remaining requests > 0, limit reset
+    handler.remaining = 1
     handler.reset_time = datetime.now(timezone.utc) - timedelta(seconds=10)
     assert not handler.is_limit_exceeded()
 
