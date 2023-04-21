@@ -93,20 +93,29 @@ async def test_on_rate_limit_exceeded(fur_stream: FurStream, mock_stream_respons
 async def test_retweet_success(fur_stream: FurStream, mock_stream_response: MagicMock):
     fur_stream.rate_limit_handler.is_limit_exceeded = lambda: False
     fur_stream.rate_limit_handler.populated = True
-    mock_stream_response.retweet = AsyncMock()
+
+    retweet_response_mock = AsyncMock()
+    retweet_response_mock.headers = {
+        "x-rate-limit-remaining": "100",
+        "x-rate-limit-reset": "3600",
+        "x-rate-limit-limit": "200",
+    }
+    retweet_response_mock.json = AsyncMock(return_value={"data": {"retweeted": True}})
+
+    mock_stream_response.retweet = AsyncMock(return_value=retweet_response_mock)
     fur_stream.rate_limit_handler.update_limits = MagicMock()
 
     await fur_stream.retweet(mock_stream_response)
 
     mock_stream_response.retweet.assert_called_once()
     fur_stream.rate_limit_handler.update_limits.assert_called_once_with(
-        mock_stream_response.retweet.return_value.headers
+        retweet_response_mock.headers
     )
 
 
 @pytest.mark.asyncio
 async def test_retweet_limit_exceeded(fur_stream: FurStream, mock_stream_response: MagicMock):
-    fur_stream.rate_limit_handler.is_limit_exceeded = lambda: False
+    fur_stream.rate_limit_handler.is_limit_exceeded = lambda: True
     fur_stream.rate_limit_handler.populated = True
     mock_stream_response.retweet = AsyncMock()
     fur_stream.rate_limit_handler.update_limits = MagicMock()

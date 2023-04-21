@@ -1,26 +1,32 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import time
+
+from loguru import logger
 
 
 class RetweetLimitHandler:
-    def __init__(self):
+    def __init__(self) -> None:
         self.populated = False
-        self.remaining = 0
+        self.remaining = -1
         self.reset_time = datetime.now(timezone.utc)
         self.limit = 0
 
     def is_limit_exceeded(self) -> bool:
-        return self.remaining == 0 and datetime.now(timezone.utc) < self.reset_time
+        """Returns whether the rate limit has been exceeded."""
+        return (
+            self.populated and self.remaining == 0 and self.reset_time > datetime.now(timezone.utc)
+        )
 
-    def update_limits(self, headers):
+    def update_limits(self, headers) -> None:
         self.populated = True
         remaining = int(headers.get("x-rate-limit-remaining", 0))
-        reset = int(headers.get("x-rate-limit-reset", 0))
+        reset_timestamp = int(headers.get("x-rate-limit-reset", 0))
         limit = int(headers.get("x-rate-limit-limit", 0))
 
         if remaining:
             self.remaining = remaining
-        if reset:
-            self.reset_time = datetime.fromtimestamp(reset, timezone.utc)
+        if reset_timestamp:
+            self.reset_time = datetime.fromtimestamp(reset_timestamp, timezone.utc)
         if limit:
             self.limit = limit
 
