@@ -70,7 +70,7 @@ async def test_not_retweeted_tweets_repository_add(
 ):
     not_retweeted_tweets_repository.collection.insert_one = AsyncMock()
     banned_terms_filter = BannedTermsFilter()
-    banned_terms_filter.words_found = ["banned", "words"]
+    banned_terms_filter.terms_found = ["banned", "words"]
     mock_response.failed_filters = [NsfwFilter(), banned_terms_filter]
 
     # Test adding a StreamResponse to the repository

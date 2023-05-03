@@ -3,9 +3,10 @@ from tweepy import StreamRule
 import asyncio
 from loguru import logger
 from furretweet.stream import FurStream
-from furretweet.config import Config
+from furretweet.config import config
 from furretweet.database import MongoDatabase
-import aiohttp
+from furretweet.telegram import bot as telegram_bot
+from furretweet.tweepy import client as tweepy_client
 
 STREAM_EXPANSIONS = "author_id,attachments.media_keys"
 STREAM_TWEET_FIELDS = "author_id,created_at,entities,public_metrics,possibly_sensitive"
@@ -23,15 +24,8 @@ class FurRetweet:
     def __init__(
         self,
     ):
-        self.config = Config()
-        self.client = tweepy.AsyncClient(
-            consumer_key=self.config.twitter.consumer_key,
-            consumer_secret=self.config.twitter.consumer_secret,
-            access_token=self.config.twitter.access_token,
-            access_token_secret=self.config.twitter.access_token_secret,
-            wait_on_rate_limit=False,
-            return_type=aiohttp.ClientResponse,  # type: ignore
-        )
+        self.config = config
+        self.client = tweepy_client
         self.mongo = MongoDatabase(self.config)
         self.stream = FurStream(bearer_token=self.config.twitter.bearer_token, furretweet=self)
         self._stream_task: asyncio.Task | None = None

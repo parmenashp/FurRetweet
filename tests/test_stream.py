@@ -67,7 +67,6 @@ async def test_on_response(fur_stream: FurStream, mock_response: StreamResponse)
 async def test_on_failed_filters(fur_stream: FurStream, mock_stream_response: MagicMock):
     # Mock add method of not_retweeted_tweets_repository
     fur_stream.furretweet.mongo.not_retweeted_tweets_repository.add = AsyncMock()
-
     await fur_stream.on_failed_filters(mock_stream_response)
 
     # Check if add method was called with mock_stream_response

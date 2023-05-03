@@ -45,7 +45,7 @@ def test_minimum_account_age_filter(mock_response: StreamResponse):
         min_account_age_filter = MinimumAccountAgeFilter(min_days=50)
         assert min_account_age_filter.filter(mock_response)
         assert min_account_age_filter.details == {
-            "min_days": 50,
+            "min_account_days": 50,
             "account_created_at": datetime.now(tz=timezone.utc) - timedelta(days=200),
             "checked_at": datetime.now(tz=timezone.utc),
         }
@@ -54,7 +54,7 @@ def test_minimum_account_age_filter(mock_response: StreamResponse):
         min_account_age_filter = MinimumAccountAgeFilter(min_days=50)
         assert not min_account_age_filter.filter(mock_response)
         assert min_account_age_filter.details == {
-            "min_days": 50,
+            "min_account_days": 50,
             "account_created_at": datetime.now(tz=timezone.utc) - timedelta(days=5),
             "checked_at": datetime.now(tz=timezone.utc),
         }
@@ -65,11 +65,11 @@ def test_maximum_new_lines_filter(mock_response: StreamResponse):
 
     mock_response.tweet.text = "line\nline2\nline3\nline4"
     assert max_new_lines_filter.filter(mock_response)
-    assert max_new_lines_filter.details == {"max_new_lines": 3, "new_lines": 3}
+    assert max_new_lines_filter.details == {"max_new_lines": 3, "new_lines_count": 3}
 
     mock_response.tweet.text = "line\nline2\nline3\nline4\nline5"
     assert not max_new_lines_filter.filter(mock_response)
-    assert max_new_lines_filter.details == {"max_new_lines": 3, "new_lines": 4}
+    assert max_new_lines_filter.details == {"max_new_lines": 3, "new_lines_count": 4}
 
 
 def test_fursuit_friday_only_filter(mock_response: StreamResponse):
@@ -114,26 +114,26 @@ def test_maximum_hashtags_filter(mock_response: StreamResponse):
 def test_banned_terms_filter(mock_response: StreamResponse):
     banned_terms_filter = BannedTermsFilter()
 
-    banned_terms_filter.banned_words = ["crypto", "nft", "kill"]
+    banned_terms_filter.banned_terms = ["crypto", "nft", "kill"]
 
     mock_response.tweet.text = "Hello world!"
     assert banned_terms_filter.filter(mock_response)
-    assert banned_terms_filter.details == {"banned_words": []}
+    assert banned_terms_filter.details == {"terms_found": []}
 
     # Test case when filter should exclude the tweet
     mock_response.tweet.text = "Hello world! Here is some crypto."
     assert not banned_terms_filter.filter(mock_response)
-    assert banned_terms_filter.details == {"banned_words": ["crypto"]}
+    assert banned_terms_filter.details == {"terms_found": ["crypto"]}
 
     # Test case when filter should exclude the tweet with case-insensitive matching
     mock_response.tweet.text = "Hello world! What about Crypto?"
     assert not banned_terms_filter.filter(mock_response)
-    assert banned_terms_filter.details == {"banned_words": ["crypto"]}
+    assert banned_terms_filter.details == {"terms_found": ["crypto"]}
 
     # Test case when filter should exclude the tweet with multiple banned words
     mock_response.tweet.text = "Hello world! Kill people and buy NFT and crypto."
     assert not banned_terms_filter.filter(mock_response)
     # The order of the banned words is not guaranteed
     assert all(
-        word in banned_terms_filter.details["banned_words"] for word in ["crypto", "nft", "kill"]
+        word in banned_terms_filter.details["terms_found"] for word in ["crypto", "nft", "kill"]
     )

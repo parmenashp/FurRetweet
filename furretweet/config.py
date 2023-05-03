@@ -20,6 +20,16 @@ class MongoConfig:
 
 
 @dataclass(frozen=True)
+class TelegramConfig:
+    token: str = os.environ["TELEGRAM_TOKEN"]
+    feed_channel_id: int = -498308406
+
+
+@dataclass(frozen=True)
 class Config:
     twitter = TwitterConfig()
     mongo = MongoConfig()
+    telegram = TelegramConfig()
+
+
+config = Config()

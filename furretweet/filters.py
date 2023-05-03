@@ -1,27 +1,35 @@
 from typing import TypeVar
 from furretweet.models import Tweet, StreamResponse
-
+from abc import ABC, abstractmethod
 from datetime import datetime, timezone, timedelta
 
 
 Filter = TypeVar("Filter", bound="BaseFilter")
 
 
-class BaseFilter:
+class BaseFilter(ABC):
+    @abstractmethod
     def filter(self, response: StreamResponse) -> bool:
         """Should return False if the tweet should be
         filtered out and True if it should be kept."""
         raise NotImplementedError
 
     @property
+    @abstractmethod
     def details(self) -> dict:
-        return {}
+        """Should return a dict with details about the
+        filter or an empty dict if not applicable."""
+        raise NotImplementedError
+
+    @property
+    def name(self) -> str:
+        return self.__class__.__name__
 
     def __str__(self) -> str:
         return self.__repr__()
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__}>"
+        return f"<{self.name}>"
 
 
 class MinimumFollowersFilter(BaseFilter):
@@ -46,6 +54,10 @@ class NsfwFilter(BaseFilter):
     def filter(self, response: StreamResponse) -> bool:
         return not response.tweet.possibly_sensitive
 
+    @property
+    def details(self) -> dict:
+        return {}
+
 
 class MinimumAccountAgeFilter(BaseFilter):
     def __init__(self, min_days: int):
@@ -61,7 +73,7 @@ class MinimumAccountAgeFilter(BaseFilter):
     @property
     def details(self) -> dict:
         return {
-            "min_days": self.min_days,
+            "min_account_days": self.min_days,
             "account_created_at": self.response.author.created_at,
             "checked_at": self.now,
         }
@@ -82,7 +94,7 @@ class MaximumNewLinesFilter(BaseFilter):
     def details(self) -> dict:
         return {
             "max_new_lines": self.max,
-            "new_lines": self.count,
+            "new_lines_count": self.count,
         }
 
 
@@ -92,12 +104,20 @@ class FursuitFridayOnlyFilter(BaseFilter):
             return False
         return True
 
+    @property
+    def details(self) -> dict:
+        return {}
+
 
 class MediaFilter(BaseFilter):
     def filter(self, response: StreamResponse) -> bool:
         if response.includes.media:
             return True
         return False
+
+    @property
+    def details(self) -> dict:
+        return {}
 
 
 class MaximumHashtagsFilter(BaseFilter):
@@ -124,21 +144,21 @@ class MaximumHashtagsFilter(BaseFilter):
 
 class BannedTermsFilter(BaseFilter):
     def filter(self, response: StreamResponse) -> bool:
-        self.words_found = [
-            word for word in self.banned_words if word.lower() in response.tweet.text.lower()
+        self.terms_found = [
+            terms for terms in self.banned_terms if terms.lower() in response.tweet.text.lower()
         ]
 
-        if self.words_found:
+        if self.terms_found:
             return False
         return True
 
     @property
     def details(self) -> dict:
         return {
-            "banned_words": self.words_found,
+            "terms_found": self.terms_found,
         }
 
-    banned_words = [
+    banned_terms = [
         "zoofilia",
         "zoophilia",
         "nsfw",

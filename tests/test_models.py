@@ -13,6 +13,10 @@ class MockedTestFilter(BaseFilter):
     def filter(self, response: StreamResponse) -> bool:
         return self.result
 
+    @property
+    def details(self) -> dict:
+        return {}
+
 
 @pytest.fixture
 def mock_client():
