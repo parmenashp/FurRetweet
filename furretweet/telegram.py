@@ -219,8 +219,3 @@ async def failed_tweet_unretweet_callback(callback: types.CallbackQuery):
     await bot.answer_callback_query(
         callback.id, f"Ok, vou desretweetar o tweet {callback_data['tweet_id']}"
     )
-
-
-import asyncio
-
-asyncio.run(bot.polling())
