@@ -9,6 +9,7 @@ from furretweet.models import Tweet, Includes, StreamResponse
 import tweepy.errors as tweepy_errors
 import datetime
 from zoneinfo import ZoneInfo
+from furretweet.utils import log_exception
 
 from typing import TYPE_CHECKING
 
@@ -38,6 +39,7 @@ class FridayChecker:
                 return True
         return False
 
+    @log_exception("Exception in Friday checker")
     async def _check_if_friday(self):
         # Checks if it's Friday somewhere in the world by verifying
         # if it's Friday in the earliest or latest time zones.
@@ -48,40 +50,47 @@ class FridayChecker:
         # This is to ensure that the retweet is enabled for the entire
         # duration of Friday in every time zone!
 
-        min_timezone = "Etc/GMT+12"
-        max_timezone = "Etc/GMT-14"
+        first_timezone = "Etc/GMT-14"
+        last_timezone = "Etc/GMT+12"
 
         while True:
-            if self._is_friday_in_timezones(min_timezone, max_timezone):
+            if self._is_friday_in_timezones(first_timezone, last_timezone):
                 logger.info("It's friday somewhere, retweet enabled")
                 self.is_friday = True
 
                 # Calculate time until Saturday in the latest timezone
-                now_latest_tz = datetime.datetime.now(ZoneInfo(max_timezone))
+                now_latest_tz = datetime.datetime.now(ZoneInfo(first_timezone))
                 time_until_saturday_latest_tz = (
                     datetime.datetime.combine(
-                        now_latest_tz.date() + datetime.timedelta(days=1), datetime.time.min
+                        now_latest_tz.date() + datetime.timedelta(days=1),
+                        datetime.time.min,
+                        tzinfo=now_latest_tz.tzinfo,
                     )
                     - now_latest_tz
                 ).total_seconds()
-                logger.info(f"{time_until_saturday_latest_tz} seconds of friday left")
+                logger.info(
+                    f"{time_until_saturday_latest_tz:.0f} seconds until Saturday "
+                    f"({(now_latest_tz + datetime.timedelta(seconds=time_until_saturday_latest_tz)).strftime('%Y-%m-%d %H:%M:%S %Z')})"
+                )
                 await asyncio.sleep(time_until_saturday_latest_tz)
             else:
                 logger.info("It's not Friday anywhere, retweet disabled")
                 self.is_friday = False
 
                 # Calculate time until next Friday in the earliest timezone
-                now_earliest_tz = datetime.datetime.now(ZoneInfo(min_timezone))
+                now_earliest_tz = datetime.datetime.now(ZoneInfo(first_timezone))
                 time_until_friday_earliest_tz = (
                     datetime.datetime.combine(
                         now_earliest_tz.date()
                         + datetime.timedelta((4 - now_earliest_tz.weekday()) % 7),
                         datetime.time.min,
+                        tzinfo=now_earliest_tz.tzinfo,
                     )
                     - now_earliest_tz
                 ).total_seconds()
                 logger.info(
-                    f"Sleeping for {time_until_friday_earliest_tz} seconds until next friday"
+                    f"Sleeping for {time_until_friday_earliest_tz:.0f} seconds until next Friday "
+                    f"({(now_earliest_tz + datetime.timedelta(seconds=time_until_friday_earliest_tz)).strftime('%Y-%m-%d %H:%M:%S %Z')})"
                 )
                 await asyncio.sleep(time_until_friday_earliest_tz)
 
