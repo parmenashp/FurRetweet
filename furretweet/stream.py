@@ -23,7 +23,12 @@ class LimitReached(Exception):
 class FridayChecker:
     def __init__(self):
         self.is_friday = False
-        self.task = asyncio.create_task(self._check_if_friday())
+        self.tast: asyncio.Task | None = None
+
+    async def start(self):
+        if self.task is None:
+            logger.info("Starting Friday checker")
+            self.task = asyncio.create_task(self._check_if_friday())
 
     def _is_friday_in_timezones(self, min_tz, max_tz):
         utc_now = datetime.datetime.now(datetime.timezone.utc)
@@ -106,6 +111,7 @@ class FurStream(tweepy.AsyncStreamingClient):
 
     async def on_connect(self):
         logger.info("Stream connected")
+        await self.friday_checker.start()
 
     async def on_disconnect(self):
         logger.info("Stream disconnected")
