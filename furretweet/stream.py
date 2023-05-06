@@ -7,6 +7,8 @@ import furretweet.filters as filters
 from furretweet.rate_limiter import RetweetLimitHandler
 from furretweet.models import Tweet, Includes, StreamResponse
 import tweepy.errors as tweepy_errors
+import datetime
+from zoneinfo import ZoneInfo
 
 from typing import TYPE_CHECKING
 
@@ -16,6 +18,67 @@ if TYPE_CHECKING:
 
 class LimitReached(Exception):
     pass
+
+
+class FridayChecker:
+    def __init__(self):
+        self.is_friday = False
+        self.task = asyncio.create_task(self._check_if_friday())
+
+    def _is_friday_in_timezones(self, min_tz, max_tz):
+        utc_now = datetime.datetime.now(datetime.timezone.utc)
+        for timezone in (min_tz, max_tz):
+            local_time = utc_now.astimezone(ZoneInfo(timezone))
+            if local_time.weekday() == 4:
+                return True
+        return False
+
+    async def _check_if_friday(self):
+        # Checks if it's Friday somewhere in the world by verifying
+        # if it's Friday in the earliest or latest time zones.
+        # (The latest timezone is the one furthest ahead in time.)
+        # If it's Friday in either of these time zones, the retweet
+        # is enabled until it's Saturday in the latest timezone.
+        # So, the retweet is enabled for 50 hours every Friday.
+        # This is to ensure that the retweet is enabled for the entire
+        # duration of Friday in every time zone!
+
+        min_timezone = "Etc/GMT+12"
+        max_timezone = "Etc/GMT-14"
+
+        while True:
+            if self._is_friday_in_timezones(min_timezone, max_timezone):
+                logger.info("It's friday somewhere, retweet enabled")
+                self.is_friday = True
+
+                # Calculate time until Saturday in the latest timezone
+                now_latest_tz = datetime.datetime.now(ZoneInfo(max_timezone))
+                time_until_saturday_latest_tz = (
+                    datetime.datetime.combine(
+                        now_latest_tz.date() + datetime.timedelta(days=1), datetime.time.min
+                    )
+                    - now_latest_tz
+                ).total_seconds()
+                logger.info(f"{time_until_saturday_latest_tz} seconds of friday left")
+                await asyncio.sleep(time_until_saturday_latest_tz)
+            else:
+                logger.info("It's not Friday anywhere, retweet disabled")
+                self.is_friday = False
+
+                # Calculate time until next Friday in the earliest timezone
+                now_earliest_tz = datetime.datetime.now(ZoneInfo(min_timezone))
+                time_until_friday_earliest_tz = (
+                    datetime.datetime.combine(
+                        now_earliest_tz.date()
+                        + datetime.timedelta((4 - now_earliest_tz.weekday()) % 7),
+                        datetime.time.min,
+                    )
+                    - now_earliest_tz
+                ).total_seconds()
+                logger.info(
+                    f"Sleeping for {time_until_friday_earliest_tz} seconds until next friday"
+                )
+                await asyncio.sleep(time_until_friday_earliest_tz)
 
 
 class FurStream(tweepy.AsyncStreamingClient):
@@ -39,6 +102,8 @@ class FurStream(tweepy.AsyncStreamingClient):
             filters.FursuitFridayOnlyFilter(),
         ]
 
+        self.friday_checker = FridayChecker()
+
     async def on_connect(self):
         logger.info("Stream connected")
 
@@ -46,7 +111,7 @@ class FurStream(tweepy.AsyncStreamingClient):
         logger.info("Stream disconnected")
 
     async def on_closed(self, resp: aiohttp.ClientResponse):
-        logger.info(f"Stream closed by Twitter with response: {resp}")
+        logger.error(f"Stream closed by Twitter with response: {resp}")
 
     async def on_errors(self, errors: list[dict]):
         logger.error(f"Stream errors: {errors}")
@@ -82,7 +147,10 @@ class FurStream(tweepy.AsyncStreamingClient):
             logger.exception(f"Unhandled exception while processing stream response: {tweet}")
 
     async def on_response(self, response: StreamResponse):
-        logger.debug(f"Stream received response: {response}")
+        logger.info(f"Stream received response: {response}")
+
+        if not self.friday_checker.is_friday:
+            return logger.info("Not friday, ignoring...")
 
         failed_filters = response.process_filters(self.filters)
         if failed_filters:
