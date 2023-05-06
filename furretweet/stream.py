@@ -23,7 +23,7 @@ class LimitReached(Exception):
 class FridayChecker:
     def __init__(self):
         self.is_friday = False
-        self.tast: asyncio.Task | None = None
+        self.task: asyncio.Task | None = None
 
     async def start(self):
         if self.task is None:
@@ -146,7 +146,7 @@ class FurStream(tweepy.AsyncStreamingClient):
         # I don't know why but twitter sometimes sends us a quote retweet that doesn't match
         # our stream filter, only the quoted tweet does match, so we'll just ignore this qrt.
         tweet_text_lower = tweet.text.lower()
-        if not "#fursuitfriday" in tweet_text_lower or not "@furretweet" in tweet_text_lower:
+        if not "#fursuitfriday" in tweet_text_lower and not "@furretweet" in tweet_text_lower:
             return logger.info(f"Tweet {tweet.id} does not contain #FursuitFriday or @FurRetweet")
 
         try:
