@@ -9,6 +9,8 @@ class TwitterConfig:
     access_token: str = os.environ["TWITTER_ACCESS_TOKEN"]
     access_token_secret: str = os.environ["TWITTER_ACCESS_TOKEN_SECRET"]
     bearer_token: str = os.environ["TWITTER_BEARER_TOKEN"]
+    whitelist_list_id = 1474582057816834053
+    blacklist_list_id = 1474581944432222210
     bot_account_id = 965641664487415809
 
 

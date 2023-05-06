@@ -105,7 +105,7 @@ class FurStream(tweepy.AsyncStreamingClient):
         self.client = furretweet.client
         self.rate_limit_handler = RetweetLimitHandler()
 
-        self.filters: list[filters.BaseFilter] = [
+        self.default_filters: list[filters.BaseFilter] = [
             filters.BannedTermsFilter(),
             filters.MinimumFollowersFilter(100),
             filters.NsfwFilter(),
@@ -114,6 +114,11 @@ class FurStream(tweepy.AsyncStreamingClient):
             filters.MaximumHashtagsFilter(5),
             filters.MaximumNewLinesFilter(10),
             filters.FursuitFridayOnlyFilter(),
+        ]
+
+        self.whitelist_filters: list[filters.BaseFilter] = [
+            filters.NsfwFilter(),
+            filters.MediaFilter(),
         ]
 
         self.friday_checker = FridayChecker()
@@ -173,7 +178,19 @@ class FurStream(tweepy.AsyncStreamingClient):
         if not self.friday_checker.is_friday:
             return logger.info("Not friday, ignoring...")
 
-        failed_filters = response.process_filters(self.filters)
+        # In the future we can cache the list of white/blacklisted users and update it every x seconds,
+        # but for now we'll just fetch it every time because it will always be updated.
+        # Doing this because I dont need to worry about rate limits for now, 900 requests every 15 minutes.
+        if response.author.id in await self.furretweet.get_blacklist():
+            return logger.info(f"Tweet {response.url} not retweeted, author is blacklisted.")
+
+        elif response.author.id in await self.furretweet.get_whitelist():
+            logger.info(f"Tweet {response.url} author is whitelisted!")
+            failed_filters = response.process_filters(self.whitelist_filters)
+
+        else:
+            failed_filters = response.process_filters(self.default_filters)
+
         if failed_filters:
             return await self.on_failed_filters(response)
         else:
