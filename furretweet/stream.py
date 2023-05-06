@@ -143,6 +143,12 @@ class FurStream(tweepy.AsyncStreamingClient):
         tweet = Tweet.parse_obj(data["data"])
         includes = Includes.parse_obj(data["includes"])
 
+        # I don't know why but twitter sometimes sends us a quote retweet that doesn't match
+        # our stream filter, only the quoted tweet does match, so we'll just ignore this qrt.
+        tweet_text_lower = tweet.text.lower()
+        if not "#fursuitfriday" in tweet_text_lower or not "@furretweet" in tweet_text_lower:
+            return logger.info(f"Tweet {tweet.id} does not contain #FursuitFriday or @FurRetweet")
+
         try:
             await self.on_response(
                 StreamResponse(client=self.client, tweet=tweet, includes=includes, errors=errors)
