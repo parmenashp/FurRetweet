@@ -58,16 +58,23 @@ class FridayChecker:
                 logger.info("It's friday somewhere, retweet enabled")
                 self.is_friday = True
 
-                # Calculate time until Saturday in the latest timezone
-                now_latest_tz = datetime.datetime.now(ZoneInfo(first_timezone))
+                now_latest_tz = datetime.datetime.now(ZoneInfo(last_timezone))
+
+                # Find the next Friday in the last timezone
+                friday_latest_tz = now_latest_tz.date() + datetime.timedelta(
+                    (4 - now_latest_tz.weekday()) % 7
+                )
+
+                # Calculate time until Saturday in the last timezone
                 time_until_saturday_latest_tz = (
                     datetime.datetime.combine(
-                        now_latest_tz.date() + datetime.timedelta(days=1),
+                        friday_latest_tz + datetime.timedelta(days=1),
                         datetime.time.min,
                         tzinfo=now_latest_tz.tzinfo,
                     )
                     - now_latest_tz
                 ).total_seconds()
+
                 logger.info(
                     f"{time_until_saturday_latest_tz:.0f} seconds until Saturday "
                     f"({(now_latest_tz + datetime.timedelta(seconds=time_until_saturday_latest_tz)).strftime('%Y-%m-%d %H:%M:%S %Z')})"
