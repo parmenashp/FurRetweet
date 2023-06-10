@@ -7,6 +7,9 @@ import furretweet.filters as filters
 from furretweet.rate_limiter import RetweetLimitHandler
 from furretweet.models import Tweet, Includes, StreamResponse
 import tweepy.errors as tweepy_errors
+import datetime
+from zoneinfo import ZoneInfo
+from furretweet.utils import log_exception
 
 from typing import TYPE_CHECKING
 
@@ -16,6 +19,87 @@ if TYPE_CHECKING:
 
 class LimitReached(Exception):
     pass
+
+
+class FridayChecker:
+    def __init__(self):
+        self.is_friday = False
+        self.task: asyncio.Task | None = None
+
+    async def start(self):
+        if self.task is None:
+            logger.info("Starting Friday checker")
+            self.task = asyncio.create_task(self._check_if_friday())
+
+    def _is_friday_in_timezones(self, min_tz, max_tz):
+        utc_now = datetime.datetime.now(datetime.timezone.utc)
+        for timezone in (min_tz, max_tz):
+            local_time = utc_now.astimezone(ZoneInfo(timezone))
+            if local_time.weekday() == 4:
+                return True
+        return False
+
+    @log_exception("Exception in Friday checker")
+    async def _check_if_friday(self):
+        # Checks if it's Friday somewhere in the world by verifying
+        # if it's Friday in the earliest or latest time zones.
+        # (The latest timezone is the one furthest ahead in time.)
+        # If it's Friday in either of these time zones, the retweet
+        # is enabled until it's Saturday in the latest timezone.
+        # So, the retweet is enabled for 50 hours every Friday.
+        # This is to ensure that the retweet is enabled for the entire
+        # duration of Friday in every time zone!
+
+        first_timezone = "Etc/GMT-14"
+        last_timezone = "Etc/GMT+12"
+
+        while True:
+            if self._is_friday_in_timezones(first_timezone, last_timezone):
+                logger.info("It's friday somewhere, retweet enabled")
+                self.is_friday = True
+
+                now_latest_tz = datetime.datetime.now(ZoneInfo(last_timezone))
+
+                # Find the next Friday in the last timezone
+                friday_latest_tz = now_latest_tz.date() + datetime.timedelta(
+                    (4 - now_latest_tz.weekday()) % 7
+                )
+
+                # Calculate time until Saturday in the last timezone
+                time_until_saturday_latest_tz = (
+                    datetime.datetime.combine(
+                        friday_latest_tz + datetime.timedelta(days=1),
+                        datetime.time.min,
+                        tzinfo=now_latest_tz.tzinfo,
+                    )
+                    - now_latest_tz
+                ).total_seconds()
+
+                logger.info(
+                    f"{time_until_saturday_latest_tz:.0f} seconds until Saturday "
+                    f"({(now_latest_tz + datetime.timedelta(seconds=time_until_saturday_latest_tz)).strftime('%Y-%m-%d %H:%M:%S %Z')})"
+                )
+                await asyncio.sleep(time_until_saturday_latest_tz)
+            else:
+                logger.info("It's not Friday anywhere, retweet disabled")
+                self.is_friday = False
+
+                # Calculate time until next Friday in the earliest timezone
+                now_earliest_tz = datetime.datetime.now(ZoneInfo(first_timezone))
+                time_until_friday_earliest_tz = (
+                    datetime.datetime.combine(
+                        now_earliest_tz.date()
+                        + datetime.timedelta((4 - now_earliest_tz.weekday()) % 7),
+                        datetime.time.min,
+                        tzinfo=now_earliest_tz.tzinfo,
+                    )
+                    - now_earliest_tz
+                ).total_seconds()
+                logger.info(
+                    f"Sleeping for {time_until_friday_earliest_tz:.0f} seconds until next Friday "
+                    f"({(now_earliest_tz + datetime.timedelta(seconds=time_until_friday_earliest_tz)).strftime('%Y-%m-%d %H:%M:%S %Z')})"
+                )
+                await asyncio.sleep(time_until_friday_earliest_tz)
 
 
 class FurStream(tweepy.AsyncStreamingClient):
@@ -28,7 +112,7 @@ class FurStream(tweepy.AsyncStreamingClient):
         self.client = furretweet.client
         self.rate_limit_handler = RetweetLimitHandler()
 
-        self.filters: list[filters.BaseFilter] = [
+        self.default_filters: list[filters.BaseFilter] = [
             filters.BannedTermsFilter(),
             filters.MinimumFollowersFilter(100),
             filters.NsfwFilter(),
@@ -39,14 +123,22 @@ class FurStream(tweepy.AsyncStreamingClient):
             filters.FursuitFridayOnlyFilter(),
         ]
 
+        self.whitelist_filters: list[filters.BaseFilter] = [
+            filters.NsfwFilter(),
+            filters.MediaFilter(),
+        ]
+
+        self.friday_checker = FridayChecker()
+
     async def on_connect(self):
         logger.info("Stream connected")
+        await self.friday_checker.start()
 
     async def on_disconnect(self):
         logger.info("Stream disconnected")
 
     async def on_closed(self, resp: aiohttp.ClientResponse):
-        logger.info(f"Stream closed by Twitter with response: {resp}")
+        logger.error(f"Stream closed by Twitter with response: {resp}")
 
     async def on_errors(self, errors: list[dict]):
         logger.error(f"Stream errors: {errors}")
@@ -72,6 +164,12 @@ class FurStream(tweepy.AsyncStreamingClient):
         tweet = Tweet.parse_obj(data["data"])
         includes = Includes.parse_obj(data["includes"])
 
+        # I don't know why but twitter sometimes sends us a quote retweet that doesn't match
+        # our stream filter, only the quoted tweet does match, so we'll just ignore this qrt.
+        tweet_text_lower = tweet.text.lower()
+        if not "#fursuitfriday" in tweet_text_lower and not "@furretweet" in tweet_text_lower:
+            return logger.info(f"Tweet {tweet.id} does not contain #FursuitFriday or @FurRetweet")
+
         try:
             await self.on_response(
                 StreamResponse(client=self.client, tweet=tweet, includes=includes, errors=errors)
@@ -82,9 +180,24 @@ class FurStream(tweepy.AsyncStreamingClient):
             logger.exception(f"Unhandled exception while processing stream response: {tweet}")
 
     async def on_response(self, response: StreamResponse):
-        logger.debug(f"Stream received response: {response}")
+        logger.info(f"Stream received response: {response}")
 
-        failed_filters = response.process_filters(self.filters)
+        if not self.friday_checker.is_friday:
+            return logger.info("Not friday, ignoring...")
+
+        # In the future we can cache the list of white/blacklisted users and update it every x seconds,
+        # but for now we'll just fetch it every time because it will always be updated.
+        # Doing this because I dont need to worry about rate limits for now, 900 requests every 15 minutes.
+        if response.author.id in await self.furretweet.get_blacklist():
+            return logger.info(f"Tweet {response.url} not retweeted, author is blacklisted.")
+
+        elif response.author.id in await self.furretweet.get_whitelist():
+            logger.info(f"Tweet {response.url} author is whitelisted!")
+            failed_filters = response.process_filters(self.whitelist_filters)
+
+        else:
+            failed_filters = response.process_filters(self.default_filters)
+
         if failed_filters:
             return await self.on_failed_filters(response)
         else:

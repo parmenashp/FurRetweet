@@ -1,3 +1,4 @@
+import aiohttp
 import tweepy.asynchronous as tweepy
 from tweepy import StreamRule
 import asyncio
@@ -21,9 +22,7 @@ STREAM_RULES = [
 
 
 class FurRetweet:
-    def __init__(
-        self,
-    ):
+    def __init__(self):
         self.config = config
         self.client = tweepy_client
         self.mongo = MongoDatabase(self.config)
@@ -33,6 +32,28 @@ class FurRetweet:
     async def start(self):
         logger.info("Starting FurRetweet")
         await self._start_stream()
+
+    async def get_whitelist(self) -> list[int]:
+        return await self.get_users_id_from_list(self.config.twitter.whitelist_list_id)
+
+    async def get_blacklist(self) -> list[int]:
+        return await self.get_users_id_from_list(self.config.twitter.blacklist_list_id)
+
+    async def get_users_id_from_list(self, list_id: int) -> list[int]:
+        paginator = tweepy.AsyncPaginator(
+            self.client.get_list_members,
+            list_id,
+            user_auth=True,
+        )
+
+        users_id = []
+        async for response in paginator:  # type: ignore
+            response: aiohttp.ClientResponse
+            json = await response.json()
+            data = json.get("data", [])
+            users_id.extend([int(user["id"]) for user in data])
+
+        return users_id
 
     async def _setup_stream_filter(self):
         # Check if rule already exists, if not add it
